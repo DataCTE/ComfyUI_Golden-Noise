@@ -67,18 +67,44 @@ class Attention(nn.Module):
 class NoiseTransformer(nn.Module):
     def __init__(self, resolution=128):
         super().__init__()
-        self.upsample = lambda x: F.interpolate(x, [224,224])
-        self.downsample = lambda x: F.interpolate(x, [resolution,resolution])
+        self.target_size = 224  # Swin transformer's expected input size
+        self.resolution = resolution
+        # Remove fixed size from upsample/downsample
         self.upconv = nn.Conv2d(7,4,(1,1),(1,1),(0,0))
         self.downconv = nn.Conv2d(4,3,(1,1),(1,1),(0,0))
         self.swin = create_model("swin_tiny_patch4_window7_224",pretrained=True)
 
     def forward(self, x, residual=False):
-        if residual:
-            x = self.upconv(self.downsample(self.swin.forward_features(self.downconv(self.upsample(x))))) + x
+        # Get input dimensions
+        b, c, h, w = x.shape
+        
+        # Scale to Swin's required input size while maintaining aspect ratio
+        aspect_ratio = w / h
+        if aspect_ratio > 1:
+            new_w = self.target_size
+            new_h = int(self.target_size / aspect_ratio)
         else:
-            x = self.upconv(self.downsample(self.swin.forward_features(self.downconv(self.upsample(x)))))
-        return x
+            new_h = self.target_size
+            new_w = int(self.target_size * aspect_ratio)
+        
+        # Ensure dimensions are multiples of 32 (Swin requirement)
+        new_h = ((new_h + 31) // 32) * 32
+        new_w = ((new_w + 31) // 32) * 32
+        
+        # Dynamic up/downsampling
+        x_up = F.interpolate(x, size=(new_h, new_w), mode='bilinear')
+        x_down = self.downconv(x_up)
+        features = self.swin.forward_features(x_down)
+        x_processed = self.downsample(features)
+        output = self.upconv(x_processed)
+        
+        # Resize back to input dimensions
+        output = F.interpolate(output, size=(h, w), mode='bilinear')
+        
+        if residual:
+            output = output + x
+            
+        return output
 
 class SVDNoiseUnet(nn.Module):
     def __init__(self, in_channels=4, out_channels=4, resolution=128):
