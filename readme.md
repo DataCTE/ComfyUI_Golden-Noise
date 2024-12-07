@@ -58,7 +58,9 @@ The node appears in ComfyUI as "Golden Noise Generator" under the "latent/noise"
 
 ## Pre-trained Weights
 
-The node uses pre-trained Swin Transformer weights which are automatically downloaded on first use.
+link to the weights [here](https://drive.google.com/drive/folders/1Z0wg4HADhpgrztyT3eWijPbJJN5Y2jQt)
+
+they are pth files so be careful and i would suggest converting them to safetensors.
 
 ## Citation
 
