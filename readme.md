@@ -1,15 +1,16 @@
-# Golden Noise Generator for ComfyUI
+# Golden Noise Generator for ComfyUI (SDXL)
 
 ## Overview
 
-This is a ComfyUI custom node implementation of the Golden Noise Generator from the paper ["Golden Noise for Diffusion Models: A Learning Framework"](https://arxiv.org/abs/2411.09502). The node transforms random Gaussian noise into "golden noise" by adding desirable perturbations derived from text prompts to boost the overall quality and semantic faithfulness of synthesized images.
+This is a ComfyUI custom node that implements the Golden Noise Generator from the paper ["Golden Noise for Diffusion Models: A Learning Framework"](https://arxiv.org/abs/2411.09502), specifically optimized for SDXL. The node enhances the initial latent noise used in the diffusion process to improve image quality and semantic consistency.
 
 ## Features
 
-- Supports SDXL, DreamShaper-xl-v2-turbo, and Hunyuan-DiT models
-- Integrates seamlessly with ComfyUI's workflow
-- Includes both transformer and SVD-based noise processing
-- Optional residual connections for fine-tuned control
+- Optimized for SDXL models
+- Transformer-based noise processing using Swin Transformer
+- SVD-based noise enhancement
+- Residual connections for controlled noise modification
+- Seamless integration with ComfyUI workflows
 
 ## Installation
 
@@ -30,12 +31,12 @@ pip install timm einops
 
 ## Usage
 
-After installation, you'll find a new node in ComfyUI called "Golden Noise Generator" under the "latent/noise" category.
+The node appears in ComfyUI as "Golden Noise Generator" under the "latent/noise" category.
 
 ### Node Inputs
 - **Source**: Choose between CPU or GPU processing
-- **Use Transformer**: Enable/disable transformer-based noise processing
-- **Use SVD**: Enable/disable SVD-based noise processing
+- **Use Transformer**: Enable/disable Swin Transformer processing
+- **Use SVD**: Enable/disable SVD-based noise enhancement
 - **Residual**: Enable/disable residual connections
 - **Seed**: Random seed for reproducibility
 - **Width**: Output width (must be divisible by 8)
@@ -43,14 +44,21 @@ After installation, you'll find a new node in ComfyUI called "Golden Noise Gener
 - **Batch Size**: Number of samples to generate
 
 ### Example Workflow
-1. Add the "Golden Noise Generator" node to your workflow
-2. Connect it to your model's latent input
-3. Configure the settings as needed
-4. Run your workflow with enhanced noise generation
+1. Load your SDXL checkpoint
+2. Add the "Golden Noise Generator" node
+3. Connect the noise output to your KSampler's latent input
+4. Configure settings (recommended to start with all options enabled)
+5. Generate!
+
+### Recommended Settings for SDXL
+- Resolution: 1024x1024 (standard SDXL resolution)
+- Use both transformer and SVD processing
+- Enable residual connections for stable results
+- Adjust seed for different noise patterns
 
 ## Pre-trained Weights
 
-Download the pre-trained weights from [this Google Drive link](https://drive.google.com/drive/folders/1Z0wg4HADhpgrztyT3eWijPbJJN5Y2jQt?usp=drive_link) and place them in the appropriate model directory.
+The node uses pre-trained Swin Transformer weights which are automatically downloaded on first use.
 
 ## Citation
 
@@ -63,16 +71,16 @@ If you use this node in your work, please cite the original paper:
       year={2024},
       eprint={2411.09502},
       archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2411.09502}, 
+      primaryClass={cs.LG}
 }
 ```
 
 ## License
 
-This project is licensed under the same terms as the original Golden Noise for Diffusion Models implementation.
+This project is licensed under the MIT License.
 
 ## Acknowledgments
 
-- Original implementation by Zikai Zhou et al.
-- ComfyUI community for the framework and support
+- Original paper by Zikai Zhou et al.
+- ComfyUI community
+- Swin Transformer team for the pre-trained models
