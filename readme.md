@@ -62,6 +62,11 @@ link to the weights [here](https://drive.google.com/drive/folders/1Z0wg4HADhpgrz
 
 they are pth files so be careful and i would suggest converting them to safetensors.
 
+i provide a very simple script to convert them to safetensors.
+```bash
+python convert.py --input weights --output weights
+```
+
 ## Citation
 
 If you use this node in your work, please cite the original paper:
