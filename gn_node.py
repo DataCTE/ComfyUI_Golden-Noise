@@ -69,40 +69,88 @@ class NoiseTransformer(nn.Module):
         super().__init__()
         self.target_size = 224  # Swin transformer's expected input size
         self.resolution = resolution
-        # Remove fixed size from upsample/downsample
-        self.upconv = nn.Conv2d(7,4,(1,1),(1,1),(0,0))
-        self.downconv = nn.Conv2d(4,3,(1,1),(1,1),(0,0))
-        self.swin = create_model("swin_tiny_patch4_window7_224",pretrained=True)
+        self.hidden_dim = 768  # Swin transformer's output dimension
+        
+        # Adjust channel dimensions for different scales
+        self.upconv = nn.Conv2d(7, 4, (1, 1), (1, 1), (0, 0))
+        self.downconv = nn.Conv2d(4, 3, (1, 1), (1, 1), (0, 0))
+        
+        # Initialize Swin Transformer
+        self.swin = create_model("swin_tiny_patch4_window7_224", pretrained=True)
+        
+        # Fix: Adjust dimensions to match Swin's output
+        self.scale_norm = nn.LayerNorm(self.hidden_dim)
+        self.scale_attention = nn.MultiheadAttention(self.hidden_dim, 8, batch_first=True)
+        
+        # Add projection layers to handle dimension changes
+        self.pre_proj = nn.Conv2d(4, self.hidden_dim, 1)
+        self.post_proj = nn.Conv2d(self.hidden_dim, 7, 1)
 
     def forward(self, x, residual=False):
         # Get input dimensions
         b, c, h, w = x.shape
         
-        # Scale to Swin's required input size while maintaining aspect ratio
+        # First ensure dimensions are multiples of 32
+        pad_h = (32 - h % 32) % 32
+        pad_w = (32 - w % 32) % 32
+        
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, (0, pad_w, 0, pad_h), mode='reflect')
+        
+        # Calculate intermediate size that maintains aspect ratio
         aspect_ratio = w / h
         if aspect_ratio > 1:
-            new_w = self.target_size
-            new_h = int(self.target_size / aspect_ratio)
+            interim_h = self.target_size
+            interim_w = int(self.target_size * aspect_ratio)
         else:
-            new_h = self.target_size
-            new_w = int(self.target_size * aspect_ratio)
+            interim_w = self.target_size
+            interim_h = int(self.target_size / aspect_ratio)
+            
+        # Ensure interim dimensions are multiples of 32
+        interim_h = ((interim_h + 31) // 32) * 32
+        interim_w = ((interim_w + 31) // 32) * 32
         
-        # Ensure dimensions are multiples of 32 (Swin requirement)
-        new_h = ((new_h + 31) // 32) * 32
-        new_w = ((new_w + 31) // 32) * 32
+        # Initial resize to interim dimensions
+        x_interim = F.interpolate(x, size=(interim_h, interim_w), 
+                                mode='bilinear', align_corners=False)
         
-        # Dynamic up/downsampling
-        x_up = F.interpolate(x, size=(new_h, new_w), mode='bilinear')
-        x_down = self.downconv(x_up)
-        features = self.swin.forward_features(x_down)
-        x_processed = self.downsample(features)
+        # Project to higher dimension using Conv2d
+        x_processed = self.pre_proj(x_interim)  # [B, 768, H, W]
+        
+        # Down-project for Swin
+        x_down = self.downconv(x_interim)  # Use original channels
+        x_swin = F.interpolate(x_down, size=(self.target_size, self.target_size), 
+                             mode='bilinear', align_corners=False)
+        
+        # Process through Swin Transformer
+        features = self.swin.forward_features(x_swin)  # [B, N, 768]
+        
+        # Fix: Reshape features for attention
+        # features is [B, N, 768] where N = (target_size/32)^2
+        N = (self.target_size // 32) ** 2
+        features = features.view(b, N, self.hidden_dim)
+        
+        # Apply attention (features already in correct shape [B, N, hidden_dim])
+        features_attn, _ = self.scale_attention(features, features, features)
+        
+        # Reshape to spatial dimensions
+        features = features_attn.view(b, self.target_size // 32, self.target_size // 32, self.hidden_dim)
+        features = features.permute(0, 3, 1, 2)  # [B, 768, H/32, W/32]
+        
+        # Project back to output channels
+        features = self.post_proj(features)  # [B, 7, H/32, W/32]
+        
+        # Resize to original dimensions
+        x_processed = F.interpolate(features, size=(h + pad_h, w + pad_w), 
+                                  mode='bilinear', align_corners=False)
         output = self.upconv(x_processed)
         
-        # Resize back to input dimensions
-        output = F.interpolate(output, size=(h, w), mode='bilinear')
+        # Remove padding if added
+        if pad_h > 0 or pad_w > 0:
+            output = output[:, :, :h, :w]
         
         if residual:
-            output = output + x
+            output = output + x[:, :, :h, :w]
             
         return output
 
